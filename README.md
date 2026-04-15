@@ -8,7 +8,8 @@ Assignment: Demonstrate Playwright's superior speed vs. traditional tools by bui
 
 | Feature       | Details                                                       |
 | ------------- | ------------------------------------------------------------- |
-| Architecture  | Page Object Model (POM) with TypeScript                       |
+| Architecture  | POM + Page Fixtures pattern with TypeScript strict mode       |
+| Path Aliases  | `@pages/*`, `@fixtures/*`, `@data/*`, `@utils/*`              |
 | Auth State    | `storageState` shared across all tests - no re-login per spec |
 | Cross-browser | Chromium, Firefox and WebKit run in parallel                  |
 | Tracing       | Trace Viewer activated on the first retry of every failure    |
@@ -29,6 +30,8 @@ e-comerce-project/
 │   ├── data/
 │   │   ├── checkout.ts
 │   │   └── users.ts
+│   ├── fixtures/
+│   │   └── pages.ts          # page fixtures (tests receive page objects via destructuring)
 │   ├── pages/
 │   │   ├── BasePage.ts
 │   │   ├── LoginPage.ts
@@ -36,6 +39,7 @@ e-comerce-project/
 │   │   ├── CartPage.ts
 │   │   ├── CheckoutPage.ts
 │   │   ├── OrderConfirmationPage.ts
+│   │   ├── ProductDetailPage.ts
 │   │   └── index.ts
 │   ├── setup/
 │   │   └── global-setup.ts
@@ -46,9 +50,9 @@ e-comerce-project/
 │   ├── login.spec.ts
 │   ├── cart.spec.ts
 │   ├── checkout.spec.ts
+│   ├── product.spec.ts
 │   └── failure.spec.ts
-├── .env
-├── .env.example
+├── .env.example              # copy to .env locally (.env is gitignored)
 ├── playwright.config.ts
 ├── tsconfig.json
 ├── .prettierrc
@@ -89,7 +93,7 @@ npm test
 ### 4 - Run specific suites
 
 ```bash
-npm run test:smoke        # login + cart + checkout only
+npm run test:smoke        # login + cart + checkout + product
 npm run test:login
 npm run test:cart
 npm run test:checkout
@@ -138,7 +142,14 @@ BasePage (abstract)
   ├── InventoryPage
   ├── CartPage
   ├── CheckoutPage
-  └── OrderConfirmationPage
+  ├── OrderConfirmationPage
+  └── ProductDetailPage
+```
+
+Tests never instantiate page objects directly. Instead, `src/fixtures/pages.ts` extends the Playwright `test` object so specs receive them via destructuring:
+
+```typescript
+test('example', async ({ inventoryPage, cartPage }) => { ... });
 ```
 
 ### storageState - Shared Auth
@@ -167,11 +178,14 @@ npm run typecheck       # TypeScript strict type check
 
 The workflow at `.github/workflows/playwright.yml`:
 
-1. Installs dependencies and browsers
+1. Installs dependencies and browsers (`npm ci` uses `.npmrc` → public registry only)
 2. Runs type check, lint, and format check
 3. Executes the smoke suite
 4. Runs the failure spec to capture traces
 5. Uploads the HTML report and test-results/ as artefacts
+
+**Environment variables in CI:** `.env` is gitignored. The workflow injects vars from
+GitHub Secrets with SauceDemo public defaults as fallback — no secrets configuration needed for this project.
 
 ---
 
