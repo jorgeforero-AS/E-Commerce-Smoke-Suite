@@ -1,0 +1,98 @@
+name: Playwright E-Commerce Smoke Suite
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  # Allow manual triggers from the GitHub Actions UI
+  workflow_dispatch:
+
+# ---------------------------------------------------------------------------
+# HOW ENVIRONMENT VARIABLES WORK IN CI
+# ---------------------------------------------------------------------------
+# The .env file is in .gitignore and is NEVER pushed to the repository.
+# In GitHub Actions, variables come from two places:
+#
+#   1. Repository Secrets (Settings -> Secrets and variables -> Actions)
+#      Used for sensitive data in real projects.
+#
+#   2. Fallback defaults defined directly in this YAML file.
+#      SauceDemo is a public demo site so the credentials are public.
+#      No secrets need to be configured - the fallbacks are sufficient.
+#
+# dotenv.config() in playwright.config.ts and auth.setup.ts silently does
+# nothing when .env does not exist. All process.env.XXX reads use the ??
+# operator so they fall back to safe defaults when the var is not set.
+# ---------------------------------------------------------------------------
+
+jobs:
+  test:
+    name: Run Playwright Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run type check
+        run: npm run typecheck
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Run smoke tests
+        run: npm run test:smoke
+        env:
+          CI: true
+          # Use repository secrets if defined, otherwise fall back to SauceDemo public defaults.
+          # For a private project, add these as repository secrets:
+          #   Settings -> Secrets and variables -> Actions -> New repository secret
+          BASE_URL: ${{ secrets.BASE_URL || 'https://www.saucedemo.com' }}
+          STANDARD_USER: ${{ secrets.STANDARD_USER || 'standard_user' }}
+          PASSWORD: ${{ secrets.PASSWORD || 'secret_sauce' }}
+
+      - name: Run failure spec (generates trace.zip for Trace Viewer demo)
+        run: npm run test:failure
+        continue-on-error: true
+        env:
+          CI: true
+          BASE_URL: ${{ secrets.BASE_URL || 'https://www.saucedemo.com' }}
+          STANDARD_USER: ${{ secrets.STANDARD_USER || 'standard_user' }}
+          PASSWORD: ${{ secrets.PASSWORD || 'secret_sauce' }}
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${{ matrix.os }}
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload test results (traces / screenshots / videos)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: test-results/
+          retention-days: 30
